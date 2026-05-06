@@ -1,9 +1,9 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.83.0 — Rich Text & Nested Table Bug Fixes",
-      "versionNumber": "1.83.0.NEXT",
-      "ancestorId": "04tal000006rKBdAAM",
+      "versionName": "1.84.0 — Visual Builder Accessibility",
+      "versionNumber": "1.84.0.NEXT",
+      "ancestorId": "04tVx000000QKRJIA4",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
