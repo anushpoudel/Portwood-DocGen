@@ -4411,10 +4411,16 @@ private class DocGenSignatureTests {
     @isTest
     static void testParseAndDedupTemplateIds_emptyAndSingle() {
         Test.startTest();
-        System.assertEquals(0, DocGenSignatureSenderController.parseAndDedupTemplateIds('[]').size(), 'Empty input → empty output');
+        System.assertEquals(
+            0,
+            DocGenSignatureSenderController.parseAndDedupTemplateIds('[]').size(),
+            'Empty input → empty output'
+        );
 
         Id only = '0Mw000000000099AAA';
-        List<Id> single = DocGenSignatureSenderController.parseAndDedupTemplateIds(JSON.serialize(new List<Id>{ only, only, only }));
+        List<Id> single = DocGenSignatureSenderController.parseAndDedupTemplateIds(
+            JSON.serialize(new List<Id>{ only, only, only })
+        );
         System.assertEquals(1, single.size(), 'All-duplicate input collapses to one');
         System.assertEquals(only, single[0]);
         Test.stopTest();

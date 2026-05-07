@@ -47,9 +47,9 @@ try {
     if (templates.size() < 4) {
         System.debug(
             'SETUP: only found ' +
-            templates.size() +
-            ' Diag Multipath templates. Run scripts/diag-multipath-seed.apex first, ' +
-            'or falling back to any 4 active Word templates (no sentinel cross-leak check).'
+                templates.size() +
+                ' Diag Multipath templates. Run scripts/diag-multipath-seed.apex first, ' +
+                'or falling back to any 4 active Word templates (no sentinel cross-leak check).'
         );
         templates = [
             SELECT Id, Name
@@ -67,8 +67,8 @@ try {
 if (templates.size() < 4) {
     System.debug(
         'SETUP: FAIL — need ≥4 active Word templates, found ' +
-        templates.size() +
-        '. Create more or seed via e2e-02-template-crud.apex.'
+            templates.size() +
+            '. Create more or seed via e2e-02-template-crud.apex.'
     );
     return;
 }
@@ -139,15 +139,15 @@ for (Integer docIdx = 0; docIdx < templates.size(); docIdx++) {
 
         System.debug(
             'ITER ' +
-            docIdx +
-            ' — tid=' +
-            tid +
-            ' name="' +
-            tname +
-            '" docXmlLen=' +
-            docXmlLens[docIdx] +
-            ' htmlLen=' +
-            htmlLens[docIdx]
+                docIdx +
+                ' — tid=' +
+                tid +
+                ' name="' +
+                tname +
+                '" docXmlLen=' +
+                docXmlLens[docIdx] +
+                ' htmlLen=' +
+                htmlLens[docIdx]
         );
     } catch (Exception e) {
         fail++;
@@ -169,14 +169,14 @@ for (Integer i = 0; i < docXmls.size(); i++) {
             docXmlAllUnique = false;
             System.debug(
                 'COLLISION docXml[' +
-                i +
-                '] (' +
-                tplNames[i] +
-                ') == docXml[' +
-                j +
-                '] (' +
-                tplNames[j] +
-                ') — SMOKING GUN: mergeTemplateForSignature returned identical XML for distinct templates.'
+                    i +
+                    '] (' +
+                    tplNames[i] +
+                    ') == docXml[' +
+                    j +
+                    '] (' +
+                    tplNames[j] +
+                    ') — SMOKING GUN: mergeTemplateForSignature returned identical XML for distinct templates.'
             );
         }
     }
@@ -196,14 +196,14 @@ for (Integer i = 0; i < htmls.size(); i++) {
             htmlAllUnique = false;
             System.debug(
                 'COLLISION html[' +
-                i +
-                '] (' +
-                tplNames[i] +
-                ') == html[' +
-                j +
-                '] (' +
-                tplNames[j] +
-                ') — convertToHtml emitted identical output for distinct docXml inputs (or identical inputs).'
+                    i +
+                    '] (' +
+                    tplNames[i] +
+                    ') == html[' +
+                    j +
+                    '] (' +
+                    tplNames[j] +
+                    ') — convertToHtml emitted identical output for distinct docXml inputs (or identical inputs).'
             );
         }
     }
@@ -234,7 +234,9 @@ if (seededRun) {
         if (!htmls[i].contains(mine)) {
             fail++;
             sentinelOK = false;
-            System.debug('SENTINEL MISS: iter ' + i + ' (' + tplNames[i] + ') html does NOT contain its marker ' + mine);
+            System.debug(
+                'SENTINEL MISS: iter ' + i + ' (' + tplNames[i] + ') html does NOT contain its marker ' + mine
+            );
         }
         for (Integer j = 0; j < diagMarkers.size(); j++) {
             if (i == j) {
@@ -246,16 +248,16 @@ if (seededRun) {
                 sentinelOK = false;
                 System.debug(
                     'SENTINEL CROSS-LEAK: iter ' +
-                    i +
-                    ' (' +
-                    tplNames[i] +
-                    ') html contains ' +
-                    other +
-                    ' which belongs to iter ' +
-                    j +
-                    ' (' +
-                    tplNames[j] +
-                    ').'
+                        i +
+                        ' (' +
+                        tplNames[i] +
+                        ') html contains ' +
+                        other +
+                        ' which belongs to iter ' +
+                        j +
+                        ' (' +
+                        tplNames[j] +
+                        ').'
                 );
             }
         }
@@ -288,18 +290,18 @@ for (Integer i = 0; i < htmls.size(); i++) {
             attributionOK = false;
             System.debug(
                 'CROSS-LEAK: template[' +
-                i +
-                '] name "' +
-                name +
-                '" appears in html[' +
-                j +
-                '] but NOT in its own html[' +
-                i +
-                '] — likely indicates iteration ' +
-                j +
-                ' rendered template ' +
-                i +
-                '\'s content.'
+                    i +
+                    '] name "' +
+                    name +
+                    '" appears in html[' +
+                    j +
+                    '] but NOT in its own html[' +
+                    i +
+                    '] — likely indicates iteration ' +
+                    j +
+                    ' rendered template ' +
+                    i +
+                    '\'s content.'
             );
         }
     }
@@ -323,11 +325,11 @@ try {
         fail++;
         System.debug(
             'ASSERT 4: FAIL — replay of templates[0] differs from original. ' +
-            'origLen=' +
-            docXmlLens[0] +
-            ' replayLen=' +
-            (replayXml == null ? 0 : replayXml.length()) +
-            ' — indicates stale state across calls.'
+                'origLen=' +
+                docXmlLens[0] +
+                ' replayLen=' +
+                (replayXml == null ? 0 : replayXml.length()) +
+                ' — indicates stale state across calls.'
         );
     }
 } catch (Exception e) {
@@ -342,9 +344,9 @@ if (fail == 0) {
     System.debug('ALL TESTS PASSED — merge/convert pipeline is clean.');
     System.debug(
         'NEXT: bug is upstream (LWC sending duplicate templateIds) or downstream ' +
-        '(signer-side fetchDocumentData consuming stale cache). Capture a real ' +
-        'DocGen_Signature_Request__c.Id from a reproducer and dump its ' +
-        'Signature_Data__c + Template_Ids__c to compare.'
+            '(signer-side fetchDocumentData consuming stale cache). Capture a real ' +
+            'DocGen_Signature_Request__c.Id from a reproducer and dump its ' +
+            'Signature_Data__c + Template_Ids__c to compare.'
     );
 } else {
     System.debug('FAILURES DETECTED — root cause is in the merge/convert pipeline.');
