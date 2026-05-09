@@ -1091,32 +1091,96 @@ A packet is multiple templates generated in one action and merged (or sent as a 
 
 ### 8.6 From an Experience Cloud public page (guest users)
 
-The DocGen Runner can run on an unauthenticated Experience Cloud page — useful for public proposal viewers, self-service quote downloads, or any "give the prospect a link, they get the doc" flow.
+The DocGen Runner can run on an unauthenticated Experience Cloud page — useful for public proposal viewers, self-service quote downloads, or any "give the prospect a link, they get the doc" flow. Guest visitors hit the page, click Generate, and the rendered PDF (with embedded images) downloads to their browser. No sign-in, no Salesforce account, no admin gymnastics after the one-time setup below.
 
-Setup is a three-legged stool. Miss any one and the runner silently disappears from the page (no error, no console warning — just empty space where the component should be):
+This setup has more moving parts than internal-only DocGen because guest users are isolated from your org's sharing model by default. Each piece below is required — skip any and the runner silently disappears from the page or fails to find templates / records / files. Work through them in order.
 
-**1. Component plumbing (already shipped).** The runner exposes `lightningCommunity__Page` / `lightningCommunity__Default` targets. Drop it on any LWR or Aura community page; for a public landing page, hardcode `recordId` to a single fixed Id.
+#### Prerequisites
 
-**2. Permset on the site guest user.** Assign **DocGen Guest Runner** to the site's guest user (path: Setup → Digital Experiences → All Sites → your site → **Workspaces → Administration → Pages → Go to Force.com** → **Public Access Settings** → **View Users** → guest user → Permission Set Assignments → add `DocGen Guest Runner`). This grants the Apex classes and template-object reads.
+- **DocGen v1.87 or later installed.** v1.86 had a guest PDF download bug (broken on sites with a URL path prefix) — install v1.87+ from the install link at the top of this guide.
+- **An Experience Cloud site already created and activated.** The runner targets `lightningCommunity__Page` / `lightningCommunity__Default`, so any LWR or Aura template works. Site can have a URL path prefix (e.g. `/Proposals/s`) or sit at the org root — both work in v1.87+.
 
-**3. Record-level sharing.** This is the one that bites. Guest users do **not** honor org-wide defaults — Public Read/Write to guests was a security hole Salesforce closed in the Winter '22 secure-guest-user update. The only way a guest sees a record is via a **guest user sharing rule**:
+#### Step 1 — Assign the guest permission set
 
-- Setup → **Sharing Settings** → scroll to your object (e.g. Account) → **New** under sharing rules.
-- Rule Type: **Guest user access, based on criteria** (this radio option only appears if you have an active site and the OWD is Private or Public Read Only).
-- If your OWD is currently Public Read/Write, drop it to Private first or the rule type won't be available.
-- Criteria: filter to the records you want public (e.g. `Public_Quote__c equals true`, or `Name not equal to ""` to share all).
-- Share with: **Guest user** → pick your site's guest user.
-- Access: Read Only (Salesforce won't let you grant Edit to guests anyway).
+Site guest users live behind a few clicks:
 
-After saving the rule, refresh the public page in incognito. Sharing recalculation can take a minute on busy orgs.
+1. **Setup → Digital Experiences → All Sites → your site → Workspaces → Administration → Pages → Go to Force.com**.
+2. Click **Public Access Settings** (this opens the site's profile).
+3. Click **View Users**, then click into the site guest user.
+4. Scroll to **Permission Set Assignments** → **Edit Assignments** → add **DocGen Guest Runner** → **Save**.
 
-**Debugging tip.** If the runner doesn't appear on the public page, before chasing perms or component exposure, drop a no-record test LWC on the same page (any "hello world" component with no `@wire` and no `recordId`). If it renders and the runner doesn't, the issue is record visibility — a guest sharing rule on the target record's object will fix it. If neither renders, the issue is site / component publishing.
+This grants the guest user execute access to the render-pipeline Apex classes and Read on `DocGen_Template__c` / `DocGen_Template_Version__c` (object-level only — record visibility comes from the next two steps).
 
-**Image rendering for guest PDFs.** `Blob.toPdf()` resolves relative image URLs against the org's internal lightning subdomain, which guest users have no session against — running the render under the guest user produces broken images. The runner detects guest context automatically and routes PDF generation through a platform event (`DocGen_Guest_Render__e`), which fires a trigger that runs as the **Automated Process** internal user. The actual `Blob.toPdf()` call happens in that elevated context, so embedded image URLs fetch successfully. The resulting ContentVersion's CDL is auto-flipped to `Visibility=AllUsers` so the guest's browser can download it via the site domain.
+#### Step 2 — Set up record sharing for the target object
 
-User experience: guest clicks **Generate** → sees a "running in the background" toast → LWC polls the tracking `DocGen_Job__c` every 2s → when the queueable finishes (typically 5–15s for a single record), the file downloads. No admin steps required after template upload — just mark the template's Category as containing "Public" so the guest sharing rule picks it up.
+Pick the object whose record will drive the merge — usually `Account` or a custom object. Two things on that object's sharing config:
 
-DOCX/XLSX/PowerPoint stay on the synchronous path for guests (image bytes are embedded directly in those file formats and don't require URL fetching), so they render instantly without going through the queue.
+**2a. Org-wide default (external) must be Private or Public Read Only.** Setup → Sharing Settings → top section. If the external OWD on your target object is `Public Read/Write`, drop it to `Private` (recommended) or `Public Read Only`. Without this, the next step's "Guest user access, based on criteria" rule type won't be selectable.
+
+**2b. Create a guest sharing rule on the target object.** Same Sharing Settings page, scroll to your object's sharing rules section → **New**:
+
+- **Rule Type:** Guest user access, based on criteria
+- **Criteria:** filter to the records you want guest-visible. Common patterns:
+    - `Name not equal to ""` — share every record (loose; only use for demos / fully-public data).
+    - `Public_Demo__c equals true` — share only records flagged with a custom "public" checkbox you control.
+    - Filter on a Record Type, Status, or any other field that scopes appropriately for your use case.
+- **Share with:** Guest user → pick your site's guest user (the dropdown lists active sites).
+- **Access Level:** Read (Salesforce blocks Edit for guests regardless).
+
+Save. Sharing recalculation runs in the background — give it 30–60 seconds on a busy org before testing.
+
+> **Why this is required**: guest users do NOT honor org-wide defaults — that loophole was closed in the Winter '22 "Secure Guest User" update. Public Read/Write OWD does nothing for guests; only explicit guest sharing rules grant record-level visibility.
+
+#### Step 3 — Tag templates as public and share them with the guest
+
+The runner won't show templates the guest can't see, even with the permset. Templates need their own sharing rule.
+
+**3a. Tag your guest-facing templates.** On each template you want to expose, set the **Category** field to a value containing the word `Public` (case-sensitive). Examples that match: `Public`, `Public Quote`, `Public — Account Brief`. Templates without "Public" in their Category will not be visible to guests after this setup, which is the intended behavior — most templates are internal-only.
+
+**3b. Create a guest sharing rule on `DocGen_Template__c`.** OWD on `DocGen_Template__c` is already `Private` from the package install, so no OWD change needed. Setup → Sharing Settings → scroll to **DocGen Template Sharing Rules** → **New**:
+
+- **Rule Type:** Guest user access, based on criteria
+- **Criteria:** `Category` contains `Public`
+- **Share with:** Guest user → your site's guest user
+- **Access Level:** Read
+
+Versions inherit access via master-detail, so no separate rule is needed for `DocGen_Template_Version__c`.
+
+#### Step 4 — Place the runner on the public page
+
+In Experience Builder for your site:
+
+1. Open the page that should host the generator (typically Home, or a dedicated "Download" page).
+2. Drag **DocGen Runner** from the Components panel into a region.
+3. In the component properties:
+    - **Record Id**: hardcode the Id of the public record that all guests render against (e.g. `001xxx...` for an Account). For dynamic-record cases, bind to `{!recordId}` if the page is a record-detail page.
+    - **Object API Name**: optional; the engine resolves from the Id prefix when blank.
+    - **Show Download Option**: leave on (default).
+    - **Show Save to Record / Document Packet / Combine PDFs**: leave off (default for community target). Guest users can't save back to records.
+4. Save → **Publish**.
+
+#### Step 5 — Verify in incognito
+
+Open the site URL in an **incognito / private window** (so no admin session leaks in). The runner should render with your tagged template(s) in the picker. Click **Generate** → spinner → "running in the background" toast → 5–15 seconds later the PDF downloads.
+
+If something breaks, work through the diagnostic checklist:
+
+- **Runner doesn't appear at all** → record visibility. Drop any no-record placeholder LWC on the same page; if it renders and the runner doesn't, the bound `recordId` isn't visible to guest. Recheck Step 2b.
+- **Runner renders but template picker is empty** → template sharing. The `DocGen_Template__c` rule isn't in place, the criteria doesn't match, or the template's Category doesn't contain "Public" exactly. Recheck Step 3.
+- **Template generates but PDF download is a 90-byte JSON file with `errorduringprocessing.jsp` inside** → you're on v1.86 or earlier. Upgrade to v1.87+; the URL-prefix fix is in there.
+- **PDF downloads but images are missing** → if the images come from rich text fields on records, see [§8.6.1](#861-known-limitation-rich-text-images-on-records-with-internalusers-cdl) below for the current workaround.
+
+#### 8.6.1 Known limitation — rich text images on records with InternalUsers CDL
+
+When an admin pastes an image into a rich text field on a record (e.g. `Account.RichText__c`), Salesforce defaults the resulting `ContentDocumentLink.Visibility` to `InternalUsers` — invisible to guests. PDF guest renders are unaffected (the platform event path runs as Automated Process, which is internal and reads InternalUsers files natively), but **DOCX guest renders run synchronously as the guest user** and silently skip the image during zip assembly. Tracked as issue #72.
+
+Workaround: after pasting a rich text image you want guest-visible, manually flip the CDL Visibility to `AllUsers` via the Files setup or a one-shot Apex helper. Or render to PDF instead of DOCX — the platform event path handles it automatically.
+
+#### Why this works (architecture note)
+
+`Blob.toPdf()` resolves relative image URLs against the org's internal lightning subdomain. Guest users have no session against that host — running the render under the guest's identity produces blank images. The runner detects guest context automatically (`UserInfo.getUserType() == 'Guest'`) and routes PDF generation through a platform event (`DocGen_Guest_Render__e`), which fires a trigger that runs as the **Automated Process** internal user. That user has a real lightning-subdomain session, so `Blob.toPdf` fetches embedded image URLs cleanly. The result ContentVersion's CDL is auto-flipped to `Visibility=AllUsers` so the guest's browser can download it via the site-prefixed shepherd URL. Mirrors the e-signature flow's pattern.
+
+DOCX/XLSX/PowerPoint stay on the synchronous client-assembly path for guests — those formats embed image bytes directly into the file package via SOQL, no URL-fetch hop needed (subject to the rich-text limitation in §8.6.1).
 
 ---
 
