@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.86.0 — Experience Cloud guest runner
+
+Promoted package: `04tVx000000QtorIAC` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000QtorIAC)
+
+The DocGen Runner LWC now generates fully-rendered PDFs (with embedded images) for unauthenticated visitors on Experience Cloud public pages — public proposal viewers, self-service quote downloads, and any "give the prospect a link, they get the doc" flow. Previously the runner produced blank-image PDFs because `Blob.toPdf()` resolves relative image URLs against the org's lightning subdomain that guest users have no session against.
+
+### What changed
+
+- **Platform-event-driven render context swap.** New `DocGen_Guest_Render__e` platform event published by `DocGenController.queueGuestRender` and consumed by `DocGenGuestRenderTrigger`, which fires as the **Automated Process** internal user. The trigger enqueues `DocGenGuestRenderQueueable` to do the actual render — running as Automated Process means `Blob.toPdf` can fetch shepherd image URLs successfully (internal user has a real lightning-subdomain session), and the resulting PDF carries embedded images. Mirrors the existing e-signature flow's pattern.
+- **Runner LWC routes guest PDF through the queue.** `docGenRunner` adds an `isCurrentUserGuest` wire and a `_generateGuestPdf` async path: queue → poll `DocGen_Job__c` every 2s → download via the **site-domain** shepherd URL (which the guest's browser can fetch). DOCX/XLSX/PowerPoint stay on the existing synchronous client-side-assembly path for guests since those formats embed image bytes directly into the file package via SOQL — no URL fetch hop needed.
+- **`DocGen_Guest_Runner` permission set extended.** Adds class access to `DocGenGuestRenderQueueable`. Object/FLS access to `DocGen_Template__c` / `DocGen_Template_Version__c` and the render-pipeline classes — same as v1.85.
+- **Three subtle access fixes** discovered during integration:
+    - `DocGenService.buildPdfImageMap` — `SELECT Id FROM ContentVersion WHERE Title LIKE :prefix AND IsLatest = TRUE` silently returned zero rows under Automated Process even with `WITH SYSTEM_MODE`. ContentVersion has special access machinery that even SYSTEM_MODE doesn't fully bypass on text-prefix filters. Now scopes through the version's `ContentDocumentLink`s first to get the file IDs, then applies the title-prefix filter.
+    - `DocGenTemplateManager.getDecodedTemplateData` — body CV lookup flipped from `WITH USER_MODE` to `WITH SYSTEM_MODE`. Required for fresh-upload guest renders (default `ContentDocumentLink.Visibility=InternalUsers`); access is gated upstream by the `DocGen_Template__c` sharing rule, so SYSTEM_MODE on the package-internal artifact is correct.
+    - `DocGenController.queueGuestRender` / `getGuestRenderStatus` — moved DML/SOQL into a `without sharing` `GuestRenderHelper` inner class. Guest users don't honor OWD on `DocGen_Job__c` (Winter '22 secure-guest-user removed OWD honor), so they couldn't see the tracking row they just inserted via standard sharing. The job Id returned to the LWC is effectively the access token.
+- **UserGuide §8.6 — From an Experience Cloud public page (guest users).** Full setup walkthrough: permset assignment to the Site guest user, guest sharing rule on the target object (the trap that costs hours), template Category=Public marker, plus the architecture explanation for why guest PDFs go through the platform event vs. DOCX staying synchronous.
+
+### Validation
+
+- Apex tests: 1230/1230 passing, 75% org-wide coverage
+- Code Analyzer: 0 High severity violations (41 Moderate, same documented pattern as v1.85)
+- Manual end-to-end: full setup on a fresh non-namespaced scratch (LWR Experience Cloud site, guest sharing rules on Account/Opportunity/Template, sample template with template-body image and rich-text-pasted image). Guest renders PDF in incognito → image renders correctly with no admin file-permission homework.
+
+### Known follow-ups for v1.87
+
+- **#71 — Rich-text-pasted images render at natural size in PDF output (DOCX correct).** Pre-existing bug, not specific to guest path. When Lightning RTE doesn't emit `width=`/`height=`/`style="width:..."` on the `<img>` tag (which is the common case), the PDF renderer falls through to natural intrinsic dimensions. Three fix options scoped in the issue.
+- **#72 — Guest DOCX silently skips fresh rich-text images with `Visibility=InternalUsers`.** DOCX path runs as guest (synchronous client-side assembly), and guest's USER_MODE SOQL can't see InternalUsers files. Workaround for now: admin manually flips the CDL after pasting (or runs a one-shot Apex helper). Recommended fix: route guest DOCX through the same platform event path as PDF so it benefits from the Automated Process context.
+
 ## v1.85.0 — Multipath signature dedup + Apex Provider UI
 
 Promoted package: `04tVx000000QlePIAS` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000QlePIAS)
