@@ -34,6 +34,7 @@ import OUT_FMT_FIELD from '@salesforce/schema/DocGen_Template__c.Output_Format__
 import TYPE_FIELD from '@salesforce/schema/DocGen_Template__c.Type__c';
 import IS_DEFAULT_FIELD from '@salesforce/schema/DocGen_Template__c.Is_Default__c';
 import CATEGORY_FIELD from '@salesforce/schema/DocGen_Template__c.Category__c';
+import COMMUNITY_BASE_PATH from '@salesforce/community/basePath';
 
 export default class DocGenRunner extends NavigationMixin(LightningElement) {
     @api recordId;
@@ -733,7 +734,13 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         }
         // Download via the site-domain shepherd URL — guest's browser is authenticated
         // against the site, not the lightning subdomain, so this fetch succeeds.
-        const url = '/sfc/servlet.shepherd/version/download/' + result.cvId;
+        // The site URL path prefix matters: the bare org host returns a JSON error
+        // redirect for guests; only paths under the site's base recognize the session.
+        // `@salesforce/community/basePath` returns "/<sitePrefix>/s" (or "/s" if the
+        // site has no prefix) — strip the trailing "/s" to get just the site root.
+        const bp = typeof COMMUNITY_BASE_PATH === 'string' ? COMMUNITY_BASE_PATH : '';
+        const sitePrefix = bp.endsWith('/s') ? bp.slice(0, -2) : bp;
+        const url = sitePrefix + '/sfc/servlet.shepherd/version/download/' + result.cvId;
         const link = document.createElement('a');
         link.href = url;
         link.download = '';
