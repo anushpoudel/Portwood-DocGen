@@ -1,5 +1,44 @@
 # Changelog
 
+## v1.88.0 — Parser & retriever bug-fix dot release
+
+Promoted package: `04tVx000000Qu09IAC` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000Qu09IAC)
+
+Three silent-corruption bugs in the merge engine and data retriever — all caught by community contributor [@josephedwards-png](https://github.com/josephedwards-png) with reproducible RCAs and proposed fixes — plus two runner-LWC regressions from the v1.86 / v1.87 Experience Cloud guest work.
+
+### Parser & retriever fixes
+
+- **`{#IF Field = "literal"}` (double quotes) silently always evaluated false (#69).** `evaluateSingleComparison` only stripped single quotes from the value side of comparison expressions, so the double-quoted form compared an unquoted field value (e.g. `Started`, 7 chars) against a literal string with the quote characters intact (e.g. `"Started"`, 9 chars) and never matched. No error surfaced — the IF just never fired, which is the worst class of bug since templates that "looked right" silently produced wrong output. Single-quoted form was unaffected, hiding the asymmetry from authors who happened to use single quotes. Fix broadens the strip step to accept either quote style.
+- **`{:else}` ownership not tracked across nested IF blocks (#68).** `processXml` split section bodies on the first `{:else}` it found via plain `indexOf`. When a non-IF outer loop body contained a nested `{#IF}{:else}{/IF}`, the outer scan grabbed the **inner** `{:else}` as its own split point. The recursed `trueBranch` then carried an unclosed `{#IF}` opener, and the engine threw `Malformed loop tag: missing closing "{/}" for "{#}"` with empty quote payloads — a confusing error that didn't point at the real problem. Truthy and inverse-section paths now route through a new `findElseAtDepthZero` helper that walks `#`/`^`/`/` tags to track depth and only returns a `{:else}` at depth 0.
+- **Grandchild stitcher fails for ProcessInstance subqueries (#67).** Templates trying to reproduce the standard Approval History related list via `(SELECT … FROM StepsAndWorkitems)` rendered empty rows because `ProcessInstanceHistory` and `ProcessInstanceWorkitem` are not standalone-queryable. The stitcher built a synthetic `SELECT … FROM ProcessInstanceHistory WHERE ProcessInstanceId IN :parentIds`, Salesforce rejected it with `entity type ProcessInstanceHistory does not support query`, the catch block silently swallowed the exception, and the relationship dropped out of the data map. Three sites needed the same routing change (V1 `stitchGrandchildren`, V3 `processChildNodes`, V3 `processChildNodesBulk`); when the resolved child is `ProcessInstanceHistory` or `ProcessInstanceWorkitem`, build a parent subquery from `ProcessInstance` and unwrap children via `pi.getSObjects(relationshipName)`. The downstream groupBy stitching runs unchanged because `ProcessInstanceId` comes back populated on the unwrapped children.
+
+### Runner LWC regressions (introduced by v1.86 / v1.87 guest-runner work)
+
+- **Endless spinner on internal record pages (#77).** v1.87.0 added a static `import COMMUNITY_BASE_PATH from '@salesforce/community/basePath'` to construct site-prefixed shepherd URLs for guest renders. The community-scoped module resolves only inside Experience Cloud contexts; on internal `lightning__RecordPage` placements (which PR #70 added as a target), the import fails at module-load, the LWC never finishes initializing, and the user sees an endless spinner that also blocks the rest of the record page from rendering. Fix: drop the static import and fetch the prefix via a new `DocGenController.getSiteUrlPathPrefix()` Apex method (wraps `Site.getPathPrefix()`, returns empty string outside a Site context) at runtime inside the guest-render path only.
+- **Mobile generate button greyed out on guest community pages (#78).** A long-standing `if (this._isMobile) { return this.canSaveToRecord ? ['save'] : []; }` rule in `allowedOutputModes` left mobile guests with `[]` available output modes (because guest pages disable save-to-record by default), an empty `modernOutputOptions`, and a permanently disabled generate button. The mobile-restriction rule was originally added to dodge iOS Safari's known issues with base64 + blob-URL downloads on the authenticated `Blob.toPdf` path. Guests don't take that path — they go through `DocGen_Guest_Render__e` and download via a real shepherd URL link, which mobile browsers handle natively. Fix: exempt `_isGuest` from the mobile restriction.
+
+### Security
+
+- **Explicit USER_MODE on guest-render-failure DML.** `DocGenGuestRenderTrigger` did a bare `update` in its enqueue-failure catch block. Code Analyzer (Security + AppExchange rule selectors) flagged it as an `ApexCRUDViolation` (1 High, release-blocking). Switched to `Database.update(record, AccessLevel.USER_MODE)` to declare the access level explicitly. Runtime behavior unchanged (the trigger runs as Automated Process which has full access to the package's own `DocGen_Job__c`).
+
+### Documentation
+
+- **Lightning RTE image-sizing limitation documented (#71, closed wontfix).** Lightning's rich text editor doesn't persist `width=`/`height=`/`style=` to the saved HTML — Chrome disables drag-resize outright; Firefox lets you drag but the resize doesn't make it into the markup. With no size info to work with, DocGen has no honest way to recover the user's intended dimensions. UserGuide §7.9 now documents the platform constraint and recommends the reliable workarounds: pre-resize before pasting, or use `{%Image:N}` with explicit `:WxH` for pixel-precise control across both formats.
+
+### Validation
+
+- E2E suite: 214/214 assertions across 10 scripts (`e2e-01-permissions` through `e2e-08-cleanup` plus `e2e-07-syntax3`) on a fresh `portwood-staging` no-namespace scratch.
+- Apex tests: 1203/1203 passing, 75% org-wide coverage.
+- Code Analyzer: 0 High severity violations, 41 Moderate (the 30 long-standing documented false positives in `code-analyzer.yml` plus 11 PR #70 / v1.86 platform-event-trigger baseline).
+- Parser fixes verified empirically against Joe's exact reproductions; #67 verified against 3 real `ProcessInstance` records on `DaveMoudy OG`. Internal-page spinner fix (#77) confirmed by reporter on DemoBox before package build; mobile community greyed-out fix (#78) was diagnosed against the same path and requires post-install UI verification on DemoBox.
+
+### Other changes
+
+- New `priority:P0/P1/P2/P3` and `severity:silent-corruption/visible-regression` labels with a `TRIAGE.md` rubric to make triage repeatable across the issue board.
+- CLAUDE.md refreshed off the bug-fix-branch framing — current architecture pointers, rolling milestones, no stale "do not touch" warnings.
+- Issue templates invite a reporter priority hint with TRIAGE.md as the source of truth.
+- e2e-03 stripped a stray `portwoodglobal.` namespace prefix on `DocGenHtmlRenderer` so the script compiles in a no-namespace scratch (the rest of the suite was already namespace-agnostic).
+
 ## v1.87.0 — Guest PDF download site-prefix fix
 
 Promoted package: `04tVx000000QtqTIAS` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000QtqTIAS)
