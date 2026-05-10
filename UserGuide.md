@@ -140,7 +140,7 @@ A native Salesforce document generation engine that turns merge-tag templates in
 ### Install the package
 
 ```bash
-sf package install --package 04tVx000000QL2PIAW --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000Qu1lIAC --wait 10 --target-org <your-org>
 ```
 
 Or use the install links at the top of this guide. The install bundles the merge engine, all Lightning components, custom objects, permission sets, and the e-signature Visualforce pages.
@@ -148,9 +148,25 @@ Or use the install links at the top of this guide. The install bundles the merge
 ### Post-install checklist
 
 1. **Assign the `DocGen_Admin` permission set** to yourself — Setup → Users → Permission Sets → DocGen Admin → Manage Assignments → Add. See [§4](#4-permission-sets) for who needs what.
-2. **Enable the Visualforce PDF Rendering Service release update** — Setup → Release Updates → "Use the Visualforce PDF Rendering Service for `Blob.toPdf()` Invocations" → Get Started → Enable. Mandatory for PDF output.
-3. **Open the DocGen app** from the App Launcher. The Command Hub is your home base for managing templates, running bulk jobs, and configuring signatures.
-4. **For e-signatures only** — run through the [signature admin setup](#1012-admin-setup-one-time) before sending the first signature request: Site URL, Org-Wide Email Address, guest permission set on the site's guest user.
+2. **Add `HTML` and `Excel` to two `Type` picklists** _(one-time, see callout below)_ — required before you can create HTML or Excel templates.
+3. **Enable the Visualforce PDF Rendering Service release update** — Setup → Release Updates → "Use the Visualforce PDF Rendering Service for `Blob.toPdf()` Invocations" → Get Started → Enable. Mandatory for PDF output.
+4. **Open the DocGen app** from the App Launcher. The Command Hub is your home base for managing templates, running bulk jobs, and configuring signatures.
+5. **For e-signatures only** — run through the [signature admin setup](#1012-admin-setup-one-time) before sending the first signature request: Site URL, Org-Wide Email Address, guest permission set on the site's guest user.
+
+> ⚠️ **One-time picklist setup for HTML and Excel templates**
+>
+> Salesforce 2GP managed packages don't reliably propagate new picklist value-set additions on upgrade — the values defined in the package source can silently fail to install, leaving the runtime picklist behind. If you try to save an HTML (or Excel) template before doing this step, you'll see:
+>
+> ```
+> INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST, Type: bad value for restricted picklist field: HTML: [portwoodglobal__Type__c]
+> ```
+>
+> Add the missing values **on both objects**:
+>
+> 1. Setup → Object Manager → **DocGen Template** → Fields & Relationships → **Type** → New under "Picklist Values" → add `HTML`, then `Excel`. Save.
+> 2. Setup → Object Manager → **DocGen Template Version** _(separate object, similar name)_ → Fields & Relationships → **Type** → New → add `HTML`, then `Excel`. Save.
+>
+> No data migration needed — existing rows aren't touched. Once both picklists list all four values (Word, PowerPoint, Excel, HTML), the Save flow in the Command Hub works normally for every template type. A future package release will move these picklists to a Global Value Set so this step goes away.
 
 ---
 
