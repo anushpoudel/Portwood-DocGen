@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.89.0 — Template_Version Type picklist fix + CSS 2.1 guidance
+
+Promoted package: `04tVx000000Qu1lIAC` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000Qu1lIAC)
+
+A P0 metadata bug that blocked HTML and Excel template creation in subscriber orgs, plus a doc overhaul that gives template authors (and the LLMs they collaborate with) hard rules for working within Flying Saucer's CSS 2.1 surface.
+
+### Picklist fix (P0)
+
+- **`DocGen_Template_Version__c.Type__c` was missing `HTML` and `Excel` values.** The sibling `DocGen_Template__c.Type__c` had all four values (Word/PowerPoint/Excel/HTML) and was restricted, but the version-level picklist had drifted to only Word/PowerPoint and was unrestricted. Subscriber orgs couldn't create HTML or Excel templates: the `lightning-record-edit-form` validates against the picklist's defined values and rejects the unknown value before the controller's DML runs. Slipped past internal scratch-org testing because Apex direct insert silently accepts unknown strings on unrestricted picklists. Aligning to Template parity (restricted=true, all four values) restores the create path and prevents future drift.
+
+### Documentation
+
+- **UserGuide §5.7.3 "CSS rules — what works, what doesn't, and an LLM prompt".** Salesforce's `Blob.toPdf()` is a Flying Saucer engine — essentially CSS 2.1 with a small CSS 3 subset. Modern layout primitives (`display: flex`/`grid`, `gap`, `linear-gradient`, `calc`, CSS variables, transforms, transitions) are silently dropped, the page renders, and authors get a "looks wrong" PDF without an error message. The new section gives:
+    - A DO / DON'T quick reference table.
+    - A paste-ready prompt for ChatGPT / Claude / Gemini that produces CSS 2.1-compliant templates the first time.
+    - A working CSS 2.1 skeleton template with merge tags (header, two-column block, line-item loop, totals, signature, footer).
+    - Mechanical conversion patterns for the four most common pitfalls (flex → table, grid → table, gap → margin/padding, linear-gradient → solid color).
+    - The engine-vs-source `@page` conflict pattern: when `Page_Size__c`/`Page_Orientation__c`/`Custom_Margins__c` are set on the template _and_ the source HTML declares its own `@page`, you get two competing declarations and dimensions can come out wrong.
+- **CLAUDE.md "Subsystem caution"** expanded with the same CSS 2.1 callout for future maintainers, plus the `@page` double-declaration warning. Renumbers UserGuide §5.7.4 through §5.7.10 to fit the new section in.
+
+### Investigation outcome on #60
+
+Issue #60 ("HTML templates with embedded CSS render incorrectly") does **not reproduce** in v1.88.0 / v1.89.0 with the reporter's exact `quote.html` through the full pipeline — verified empirically on `docgen-designer`. The PDF comes out with proper drawing operations, colors applied, layout rendered. The `extractHtmlStyleBlocks`/`extractHtmlBodyContent`/`wrapHtmlForPdf` code path hasn't changed since v1.61.0. What authors actually hit (and what the reporter probably saw) is the CSS-2.1 layout collapse described above; the new doc section is the durable fix for that user-experience problem.
+
+### Validation
+
+- E2E suite: 214/214 assertions across 10 scripts (`e2e-01-permissions` through `e2e-08-cleanup` plus three `e2e-07-syntax*`) on `portwood-staging`.
+- Apex tests: 1203/1203 passing, 75% org-wide coverage.
+- Code Analyzer: 0 High severity violations, 41 Moderate (no change from v1.88.0 — same documented baseline).
+- Picklist change verified against `docgen-designer` with `Schema.DescribeFieldResult.isRestrictedPicklist() == true` and Apex DML accepting `Type__c='HTML'`.
+
 ## v1.88.0 — Parser & retriever bug-fix dot release
 
 Promoted package: `04tVx000000Qu09IAC` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000Qu09IAC)
